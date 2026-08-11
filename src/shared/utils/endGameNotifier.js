@@ -92,5 +92,12 @@ export const endGameWithNotifications = async (game) => {
     timestamp: new Date().toISOString(),
   });
 
+  await triggerPusher("admin-channel", "game:updated", {
+    gameId: game._id,
+    action: "ended",
+    status: GAME_STATUS.ENDED,
+    timestamp: new Date().toISOString(),
+  });
+
   return game;
 };

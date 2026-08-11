@@ -447,6 +447,20 @@ export const publishGameWinners = async (gameId, winnerSeatNumbers) => {
   game.status = GAME_STATUS.COMPLETED;
   await game.save();
 
+  await triggerPusher(`game-${game._id}`, "seat-map:updated", {
+    gameId: game._id,
+    action: "completed",
+    status: GAME_STATUS.COMPLETED,
+    timestamp: new Date().toISOString(),
+  });
+
+  await triggerPusher("admin-channel", "game:updated", {
+    gameId: game._id,
+    action: "completed",
+    status: GAME_STATUS.COMPLETED,
+    timestamp: new Date().toISOString(),
+  });
+
   // Create In-App Notifications (one per user, regardless of seats held)
   const allParticipants = await Seat.find({ gameId })
     .select("userId seatNumber")
