@@ -23,7 +23,7 @@ export const sendEmail = async ({ to, subject, html }) => {
 
     const transporter = createTransporter();
     const mailOptions = {
-      from: `"${process.env.FROM_NAME || "Armory Game"}" <${process.env.FROM_EMAIL || process.env.SMTP_USER}>`,
+      from: `"${process.env.FROM_NAME || "Metal Tubes & Seeds"}" <${process.env.FROM_EMAIL || process.env.SMTP_USER}>`,
       to,
       subject,
       html,
@@ -41,7 +41,7 @@ export const sendEmail = async ({ to, subject, html }) => {
 // Shared building blocks
 // ============================================================
 
-const BRAND = "Armory Game";
+const BRAND = "Metal Tubes & Seeds";
 const FONT_FAMILY =
   "'Segoe UI',-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif";
 const GRADIENT = "linear-gradient(135deg,#6667DD 0%,#8B5CF6 60%,#A855F7 100%)";
@@ -94,7 +94,7 @@ const prizeCard = ({ prize, prizeImageUrl }) => `
       <td align="center" style="padding:24px 24px 6px 24px;">
         ${prizeImageUrl ? `
         <img src="${prizeImageUrl}" alt="${prize}" width="180" style="width:180px; max-width:100%; height:auto; border-radius:14px; box-shadow:0 10px 24px rgba(23,25,66,0.18);" />` : `
-        <span style="display:inline-block; width:72px; height:72px; line-height:72px; border-radius:20px; background:${GRADIENT}; color:#ffffff; font-size:24px; font-weight:800; text-align:center;">AG</span>`}
+        <span style="display:inline-block; width:72px; height:72px; line-height:72px; border-radius:20px; background:${GRADIENT}; color:#ffffff; font-size:24px; font-weight:800; text-align:center;">MTS</span>`}
       </td>
     </tr>
     <tr>
@@ -172,7 +172,7 @@ const footerSection = ({ link }) => `
             <table role="presentation" cellpadding="0" cellspacing="0">
               <tr>
                 <td style="background:${GRADIENT}; border-radius:9px; width:18px; height:18px; text-align:center; vertical-align:middle;">
-                  <span style="color:#ffffff; font-size:11px; font-weight:800; line-height:18px;">AG</span>
+                  <span style="color:#ffffff; font-size:11px; font-weight:800; line-height:18px;">MTS</span>
                 </td>
               </tr>
             </table>

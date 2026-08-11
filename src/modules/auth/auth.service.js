@@ -54,7 +54,7 @@ export const requestPasswordReset = async (email) => {
 
   await sendEmail({
     to: user.email,
-    subject: "🔒 Lucky Seat Game - Password Reset Request",
+    subject: "🔒 Metal Tubes & Seeds - Password Reset Request",
     html: `
       <h2>Password Reset Request</h2>
       <p>Click the link below to reset your password. This link is valid for 1 hour.</p>
