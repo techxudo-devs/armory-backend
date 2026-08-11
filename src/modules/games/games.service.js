@@ -1,11 +1,11 @@
 import Game from "./games.model.js";
 import ApiError from "../../shared/errors/apiError.js";
 import { getPaginatedData } from "../../shared/utils/pagination.js";
-import { endGameWithNotifications } from "../../shared/utils/endGameNotifier.js";
+import { endGameIfExpired } from "../../shared/utils/endGameNotifier.js";
 import { GAME_STATUS } from "../../constants/gameStatus.js";
 
 export const getActiveGamesList = async (page, limit) => {
-  return await getPaginatedData({
+  const result = await getPaginatedData({
     model: Game,
     query: { status: GAME_STATUS.ACTIVE },
     page,
@@ -14,6 +14,14 @@ export const getActiveGamesList = async (page, limit) => {
     select:
       "title prize prizeImageUrl totalSeats reservedSeatsCount gameCode status createdAt endDate endType",
   });
+
+  if (result.docs?.length) {
+    for (const game of result.docs) {
+      await endGameIfExpired(game);
+    }
+  }
+
+  return result;
 };
 
 export const getGameByPublicCode = async (gameCode) => {
@@ -24,13 +32,6 @@ export const getGameByPublicCode = async (gameCode) => {
   if (!game) {
     throw new ApiError(404, "Game not found.");
   }
-  if (
-    game.endType === "automatic" &&
-    game.status === GAME_STATUS.ACTIVE &&
-    game.endDate &&
-    new Date() > new Date(game.endDate)
-  ) {
-    await endGameWithNotifications(game);
-  }
+  await endGameIfExpired(game);
   return game;
 };

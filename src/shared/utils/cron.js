@@ -1,6 +1,6 @@
 import Game from "../../modules/games/games.model.js";
 import { GAME_STATUS, GAME_END_TYPE } from "../../constants/gameStatus.js";
-import { endGameWithNotifications } from "./endGameNotifier.js";
+import { endGameIfExpired } from "./endGameNotifier.js";
 
 // Ends all active automatic games whose endDate has passed
 export const checkExpiredGames = async () => {
@@ -16,7 +16,7 @@ export const checkExpiredGames = async () => {
       `[SCHEDULER] Automatically ending ${expiredGames.length} expired game(s).`,
     );
     for (const game of expiredGames) {
-      await endGameWithNotifications(game);
+      await endGameIfExpired(game);
     }
   }
 };

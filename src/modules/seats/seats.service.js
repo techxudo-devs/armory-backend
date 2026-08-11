@@ -3,7 +3,7 @@ import Game from "../games/games.model.js";
 import ApiError from "../../shared/errors/apiError.js";
 import { GAME_STATUS } from "../../constants/gameStatus.js";
 import { SEAT_STATUS } from "../../constants/seatStatus.js";
-import { endGameWithNotifications } from "../../shared/utils/endGameNotifier.js";
+import { endGameIfExpired } from "../../shared/utils/endGameNotifier.js";
 
 export const PENDING_TTL_MS = 48 * 60 * 60 * 1000;
 
@@ -54,15 +54,8 @@ export const reserveSeatsForUser = async (
 ) => {
   const game = await Game.findById(gameId);
   if (!game) throw new ApiError(404, "Game not found.");
+  await endGameIfExpired(game);
   if (game.status !== GAME_STATUS.ACTIVE) {
-    throw new ApiError(400, "This game is no longer active.");
-  }
-  if (
-    game.endType === "automatic" &&
-    game.endDate &&
-    new Date() > new Date(game.endDate)
-  ) {
-    await endGameWithNotifications(game);
     throw new ApiError(400, "This game has automatically ended.");
   }
 
@@ -155,6 +148,11 @@ export const getUserJoinedGames = async (userId, page = 1, limit = 10) => {
     .skip(skip)
     .limit(parsedLimit)
     .populate("winners.user", "fullName");
+
+  for (const game of games) {
+    await endGameIfExpired(game);
+  }
+
   const formattedDocs = games.map((game) => {
     const seatsForGame = userSeats.filter(
       (s) => s.gameId.toString() === game._id.toString(),

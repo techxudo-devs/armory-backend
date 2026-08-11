@@ -8,7 +8,26 @@ import {
 } from "./email.js";
 import { triggerPusher } from "./realtime.js";
 import { GAME_STATUS } from "../../constants/gameStatus.js";
+import { GAME_END_TYPE } from "../../constants/gameStatus.js";
 import { SEAT_STATUS } from "../../constants/seatStatus.js";
+
+/**
+ * Ends an automatic game immediately if its endDate has passed and it is
+ * still active. Used by every read/action path ("lazy auto-end") so games
+ * end on time even on serverless hosts where background timers do not run.
+ */
+export const endGameIfExpired = async (game) => {
+  if (!game) return null;
+  if (
+    game.endType === GAME_END_TYPE.AUTOMATIC &&
+    game.status === GAME_STATUS.ACTIVE &&
+    game.endDate &&
+    new Date() > new Date(game.endDate)
+  ) {
+    return await endGameWithNotifications(game);
+  }
+  return game;
+};
 
 /**
  * Marks a game as ended (only if currently active) and notifies every active

@@ -9,7 +9,7 @@ import ApiError from "../../shared/errors/apiError.js";
 import { GAME_STATUS } from "../../constants/gameStatus.js";
 import { SEAT_STATUS } from "../../constants/seatStatus.js";
 import { getPaginatedData } from "../../shared/utils/pagination.js";
-import { endGameWithNotifications } from "../../shared/utils/endGameNotifier.js";
+import { endGameWithNotifications, endGameIfExpired } from "../../shared/utils/endGameNotifier.js";
 import { uploadToCloudinary, deleteFromCloudinary } from "../../shared/utils/cloudinary.js";
 import {
   sendEmail,
@@ -384,13 +384,21 @@ export const getAllGamesForAdmin = async (page, limit, status) => {
   const query = {};
   if (status) query.status = status;
 
-  return await getPaginatedData({
+  const result = await getPaginatedData({
     model: Game,
     query,
     page,
     limit,
     sort: { createdAt: -1 },
   });
+
+  if (result.docs?.length) {
+    for (const game of result.docs) {
+      await endGameIfExpired(game);
+    }
+  }
+
+  return result;
 };
 
 export const forceEndGame = async (gameId) => {
