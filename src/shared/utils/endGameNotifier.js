@@ -6,6 +6,7 @@ import {
   sendEmail,
   buildGameEndedEmailTemplate,
 } from "./email.js";
+import { triggerPusher } from "./realtime.js";
 import { GAME_STATUS } from "../../constants/gameStatus.js";
 import { SEAT_STATUS } from "../../constants/seatStatus.js";
 
@@ -82,6 +83,13 @@ export const endGameWithNotifications = async (game) => {
       subject: `⏳ Game Ended: "${game.title}" - Winners Announcing Soon`,
       html: htmlContent,
     });
+  });
+
+  await triggerPusher(`game-${game._id}`, "seat-map:updated", {
+    gameId: game._id,
+    action: "ended",
+    status: GAME_STATUS.ENDED,
+    timestamp: new Date().toISOString(),
   });
 
   return game;

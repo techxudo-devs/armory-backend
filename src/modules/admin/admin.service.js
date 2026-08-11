@@ -4,6 +4,7 @@ import Seat from "../seats/seats.model.js";
 import User from "../users/users.model.js";
 import * as notificationService from "../notifications/notifications.service.js";
 import { releaseExpiredPendingSeats } from "../seats/seats.service.js";
+import { triggerPusher } from "../../shared/utils/realtime.js";
 import ApiError from "../../shared/errors/apiError.js";
 import { GAME_STATUS } from "../../constants/gameStatus.js";
 import { SEAT_STATUS } from "../../constants/seatStatus.js";
@@ -94,6 +95,14 @@ export const createNewGame = async (gameData, adminUserId, imageBuffer) => {
     .catch((err) =>
       console.error("[NEW GAME EMAIL NOTIFICATION ERROR]", err.message),
     );
+
+  await triggerPusher("global-notifications", "game:created", {
+    gameId: game._id,
+    gameCode,
+    title: game.title,
+    prize: game.prize,
+    createdAt: game.createdAt,
+  });
 
   return { game, publicShareLink };
 };
@@ -438,13 +447,20 @@ export const publishGameWinners = async (gameId, winnerSeatNumbers) => {
   game.status = GAME_STATUS.COMPLETED;
   await game.save();
 
-  // Create In-App Notifications
+  // Create In-App Notifications (one per user, regardless of seats held)
   const allParticipants = await Seat.find({ gameId })
     .select("userId seatNumber")
     .populate("userId", "fullName email");
   const winnerUserIds = new Set(
     winnerSeats.map((s) => s.userId._id.toString()),
   );
+
+  const winnerSeatsByUser = new Map();
+  winnerSeats.forEach((s) => {
+    const key = s.userId._id.toString();
+    if (!winnerSeatsByUser.has(key)) winnerSeatsByUser.set(key, []);
+    winnerSeatsByUser.get(key).push(s.seatNumber);
+  });
 
   const maskedWinnerNames = winnerSeats
     .map((s) => maskName(s.userId.fullName))
@@ -455,16 +471,26 @@ export const publishGameWinners = async (gameId, winnerSeatNumbers) => {
       : `Seat #${winnerSeats.map((s) => s.seatNumber).join(", #")}`;
   const winnerWord = winnerSeats.length > 1 ? "Winners" : "Winner";
 
-  const notifications = allParticipants.map((p) => {
-    const isWinner = winnerUserIds.has(p.userId._id.toString());
+  const byUser = new Map();
+  allParticipants.forEach((p) => {
+    const key = p.userId._id.toString();
+    if (!byUser.has(key)) {
+      byUser.set(key, { user: p.userId, seatNumbers: [] });
+    }
+    byUser.get(key).seatNumbers.push(p.seatNumber);
+  });
+
+  const notifications = [...byUser.values()].map(({ user, seatNumbers }) => {
+    const isWinner = winnerUserIds.has(user._id.toString());
+    const wonNumbers = winnerSeatsByUser.get(user._id.toString()) ?? [];
     return {
-      userId: p.userId._id,
+      userId: user._id,
       gameId: game._id,
       title: isWinner
         ? "🎉 Game Ended — You Won!"
         : "Game Ended — You Lost",
       message: isWinner
-        ? `The game "${game.title}" has ended and you won! Prize: ${game.prize}`
+        ? `The game "${game.title}" has ended and your seat${wonNumbers.length > 1 ? "s" : ""} #${wonNumbers.join(", #")} ${wonNumbers.length > 1 ? "won" : "has won"}! Prize: ${game.prize}`
         : `The game "${game.title}" has ended and you lost. ${winnerWord}: ${winnersLabel}`,
     };
   });
@@ -472,25 +498,27 @@ export const publishGameWinners = async (gameId, winnerSeatNumbers) => {
   await notificationService.sendBulkNotifications(notifications);
 
   // Dispatch Game-Finished Emails to all participants asynchronously
+  // (one email per user, not per seat)
   const gameLink = `${process.env.CLIENT_URL || "http://localhost:3000"}/game/${game.gameCode}`;
 
-  allParticipants.forEach((p) => {
-    if (!p.userId.email) return;
+  [...byUser.values()].forEach(({ user, seatNumbers }) => {
+    if (!user.email) return;
 
-    const isWinner = winnerUserIds.has(p.userId._id.toString());
+    const isWinner = winnerUserIds.has(user._id.toString());
+    const wonNumbers = winnerSeatsByUser.get(user._id.toString()) ?? [];
     const htmlContent = buildGameFinishedEmailTemplate({
-      recipientName: p.userId.fullName,
+      recipientName: user.fullName,
       isWinner,
       gameTitle: game.title,
       prize: game.prize,
-      mySeatNumber: p.seatNumber,
+      mySeatNumber: (isWinner ? wonNumbers : seatNumbers).join(", #"),
       winners: winnersLabel,
       gameLink,
       prizeImageUrl: game.prizeImageUrl,
     });
 
     sendEmail({
-      to: p.userId.email,
+      to: user.email,
       subject: isWinner
         ? `🎉 Game Ended — You Won "${game.title}"!`
         : `Game Ended — You Lost "${game.title}"`,
@@ -576,6 +604,26 @@ const notifySeatStatusChange = (seats, title, buildMessage) => {
   return notificationService.sendBulkNotifications(notifications);
 };
 
+const notifySeatMapUpdated = (seats, action) => {
+  const byGame = new Map();
+  seats.forEach((s) => {
+    const gameId = s.gameId._id.toString();
+    if (!byGame.has(gameId)) byGame.set(gameId, []);
+    byGame.get(gameId).push(s.seatNumber);
+  });
+
+  const triggers = [...byGame.entries()].map(([gameId, seatNumbers]) =>
+    triggerPusher(`game-${gameId}`, "seat-map:updated", {
+      gameId,
+      seatNumbers,
+      action,
+      timestamp: new Date().toISOString(),
+    }),
+  );
+
+  return Promise.all(triggers);
+};
+
 export const approvePendingSeats = async (seatIds) => {
   const seats = await Seat.find({
     _id: { $in: seatIds },
@@ -613,6 +661,13 @@ export const approvePendingSeats = async (seatIds) => {
       `Your seat${entry.seatNumbers.length > 1 ? "s" : ""} ${entry.seatNumbers.map((n) => `#${n}`).join(", ")} in "${entry.game.title}" ${entry.seatNumbers.length > 1 ? "have" : "has"} been approved. Good luck!`,
   );
 
+  await notifySeatMapUpdated(seats, "approve");
+  await triggerPusher("admin-channel", "approval:updated", {
+    action: "approve",
+    approved: seats.length,
+    timestamp: new Date().toISOString(),
+  });
+
   return { approved: seats.length };
 };
 
@@ -642,6 +697,13 @@ export const rejectPendingSeats = async (seatIds) => {
     (entry) =>
       `Your reservation for seat${entry.seatNumbers.length > 1 ? "s" : ""} ${entry.seatNumbers.map((n) => `#${n}`).join(", ")} in "${entry.game.title}" ${entry.seatNumbers.length > 1 ? "was" : "was"} rejected and the seats have been released.`,
   );
+
+  await notifySeatMapUpdated(seats, "reject");
+  await triggerPusher("admin-channel", "approval:updated", {
+    action: "reject",
+    rejected: seats.length,
+    timestamp: new Date().toISOString(),
+  });
 
   return { rejected: seats.length };
 };

@@ -1,6 +1,7 @@
 import asyncHandler from "../../shared/utils/asyncHandler.js";
 import ApiResponse from "../../shared/utils/apiResponse.js";
 import { uploadToCloudinary } from "../../shared/utils/cloudinary.js";
+import { triggerPusher } from "../../shared/utils/realtime.js";
 import * as seatsService from "./seats.service.js";
 
 export const reserveSeats = asyncHandler(async (req, res) => {
@@ -26,6 +27,21 @@ export const reserveSeats = asyncHandler(async (req, res) => {
     paymentProof,
     paymentProofPublicId,
   );
+
+  await triggerPusher("admin-channel", "seat-request:new", {
+    gameId,
+    seatNumbers: result.seatNumbers,
+    userId: req.user._id,
+    createdAt: new Date().toISOString(),
+  });
+
+  await triggerPusher(`game-${gameId}`, "seat-map:updated", {
+    gameId,
+    seatNumbers: result.seatNumbers,
+    action: "reserve",
+    createdAt: new Date().toISOString(),
+  });
+
   res
     .status(200)
     .json(
