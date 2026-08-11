@@ -12,6 +12,9 @@ import {
   endGame,
   getParticipants,
   announceWinners,
+  getPendingApprovals,
+  approvePendingSeats,
+  rejectPendingSeats,
 } from "./admin.controller.js";
 import { protect } from "../../middlewares/auth.middleware.js";
 import { authorize } from "../../middlewares/role.middleware.js";
@@ -46,5 +49,28 @@ router.delete("/games/:gameId", deleteGame);
 router.patch("/games/:gameId/end", endGame);
 router.get("/games/:gameId/participants", getParticipants);
 router.post("/games/:gameId/announce-winners", announceWinners);
+router.get("/pending-approvals", getPendingApprovals);
+router.post(
+  "/pending-approvals/approve",
+  [
+    body("seatIds")
+      .isArray({ min: 1 })
+      .withMessage("At least one seat id is required"),
+    body("seatIds.*").isMongoId().withMessage("Invalid seat id"),
+    validate,
+  ],
+  approvePendingSeats,
+);
+router.post(
+  "/pending-approvals/reject",
+  [
+    body("seatIds")
+      .isArray({ min: 1 })
+      .withMessage("At least one seat id is required"),
+    body("seatIds.*").isMongoId().withMessage("Invalid seat id"),
+    validate,
+  ],
+  rejectPendingSeats,
+);
 
 export default router;

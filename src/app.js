@@ -29,7 +29,7 @@ app.use(
 // Global Rate Limiter
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 300,
+  max: 2000,
   message: "Too many requests from this IP, please try again later.",
 });
 

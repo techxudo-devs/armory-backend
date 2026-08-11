@@ -1,4 +1,5 @@
 import Game from "../../modules/games/games.model.js";
+import Seat from "../../modules/seats/seats.model.js";
 import User from "../../modules/users/users.model.js";
 import * as notificationService from "../../modules/notifications/notifications.service.js";
 import {
@@ -6,11 +7,15 @@ import {
   buildGameEndedEmailTemplate,
 } from "./email.js";
 import { GAME_STATUS } from "../../constants/gameStatus.js";
+import { SEAT_STATUS } from "../../constants/seatStatus.js";
 
 /**
  * Marks a game as ended (only if currently active) and notifies every active
  * user via in-app notification + email. Shared by all game-ending paths:
  * manual admin end, automatic end on endDate expiry, and seat-time auto-end.
+ *
+ * Also releases any seats still pending approval (unpaid) so they can never
+ * be selected as winners.
  *
  * Idempotent: if the game is already ended/completed it returns unchanged
  * without re-sending notifications.
@@ -21,6 +26,29 @@ export const endGameWithNotifications = async (game) => {
 
   game.status = GAME_STATUS.ENDED;
   await game.save();
+
+  const releasedPending = await Seat.find({
+    gameId: game._id,
+    status: SEAT_STATUS.PENDING,
+  })
+    .select("userId seatNumber")
+    .populate("userId", "fullName");
+
+  if (releasedPending.length > 0) {
+    await Seat.deleteMany({
+      gameId: game._id,
+      status: SEAT_STATUS.PENDING,
+    });
+
+    await notificationService.sendBulkNotifications(
+      releasedPending.map((seat) => ({
+        userId: seat.userId._id,
+        gameId: game._id,
+        title: "Game Ended",
+        message: `The game "${game.title}" has ended before your pending seat #${seat.seatNumber} was approved, so it has been released.`,
+      })),
+    );
+  }
 
   const users = await User.find({ role: "user", isBlocked: false }).select(
     "email fullName",

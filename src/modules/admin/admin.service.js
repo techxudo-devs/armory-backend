@@ -3,8 +3,10 @@ import Game from "../games/games.model.js";
 import Seat from "../seats/seats.model.js";
 import User from "../users/users.model.js";
 import * as notificationService from "../notifications/notifications.service.js";
+import { releaseExpiredPendingSeats } from "../seats/seats.service.js";
 import ApiError from "../../shared/errors/apiError.js";
 import { GAME_STATUS } from "../../constants/gameStatus.js";
+import { SEAT_STATUS } from "../../constants/seatStatus.js";
 import { getPaginatedData } from "../../shared/utils/pagination.js";
 import { endGameWithNotifications } from "../../shared/utils/endGameNotifier.js";
 import { uploadToCloudinary, deleteFromCloudinary } from "../../shared/utils/cloudinary.js";
@@ -164,7 +166,9 @@ export const getDashboardMetrics = async () => {
     status: GAME_STATUS.COMPLETED,
   });
   const registeredUsers = await User.countDocuments({ role: "user" });
-  const totalSeatsReserved = await Seat.countDocuments();
+  const totalSeatsReserved = await Seat.countDocuments({
+    status: { $ne: SEAT_STATUS.PENDING },
+  });
 
   const winnerStats = await Game.aggregate([
     { $project: { count: { $size: { $ifNull: ["$winners", []] } } } },
@@ -394,7 +398,7 @@ export const forceEndGame = async (gameId) => {
 export const getParticipantsForGame = async (gameId, page, limit) => {
   return await getPaginatedData({
     model: Seat,
-    query: { gameId },
+    query: { gameId, status: { $ne: SEAT_STATUS.PENDING } },
     page,
     limit,
     sort: { seatNumber: 1 },
@@ -495,4 +499,149 @@ export const publishGameWinners = async (gameId, winnerSeatNumbers) => {
   });
 
   return game;
+};
+
+export const getPendingApprovals = async () => {
+  await releaseExpiredPendingSeats();
+
+  const seats = await Seat.find({ status: SEAT_STATUS.PENDING })
+    .sort({ createdAt: 1 })
+    .populate("gameId", "title gameCode prize totalSeats")
+    .populate("userId", "fullName phone email");
+
+  const groups = new Map();
+  seats.forEach((s) => {
+    const key = `${s.userId._id.toString()}-${s.gameId._id.toString()}`;
+    if (!groups.has(key)) {
+      groups.set(key, {
+        game: s.gameId,
+        user: s.userId,
+        seats: [],
+        reservedAt: s.createdAt,
+        expiresAt: s.pendingExpiresAt,
+      });
+    }
+    groups.get(key).seats.push({
+      seatId: s._id,
+      seatNumber: s.seatNumber,
+      paymentReference: s.paymentReference || "",
+      paymentProof: s.paymentProof || "",
+      reservedAt: s.createdAt,
+    });
+  });
+
+  return [...groups.values()].map((group) => ({
+    gameId: group.game._id,
+    game: {
+      title: group.game.title,
+      gameCode: group.game.gameCode,
+      prize: group.game.prize,
+      totalSeats: group.game.totalSeats,
+    },
+    userId: group.user._id,
+    user: {
+      fullName: group.user.fullName,
+      phone: group.user.phone,
+      email: group.user.email,
+    },
+    seatNumbers: group.seats.map((seat) => seat.seatNumber),
+    seats: group.seats,
+    total: group.seats.length,
+    reservedAt: group.reservedAt,
+    expiresAt: group.expiresAt,
+  }));
+};
+
+const notifySeatStatusChange = (seats, title, buildMessage) => {
+  const byUserGame = new Map();
+  seats.forEach((s) => {
+    const key = `${s.userId._id.toString()}-${s.gameId._id.toString()}`;
+    if (!byUserGame.has(key)) {
+      byUserGame.set(key, {
+        userId: s.userId._id,
+        game: s.gameId,
+        seatNumbers: [],
+      });
+    }
+    byUserGame.get(key).seatNumbers.push(s.seatNumber);
+  });
+
+  const notifications = [...byUserGame.values()].map((entry) => ({
+    userId: entry.userId,
+    gameId: entry.game._id,
+    title,
+    message: buildMessage(entry),
+  }));
+
+  return notificationService.sendBulkNotifications(notifications);
+};
+
+export const approvePendingSeats = async (seatIds) => {
+  const seats = await Seat.find({
+    _id: { $in: seatIds },
+    status: SEAT_STATUS.PENDING,
+  })
+    .populate("gameId", "title gameCode prize")
+    .populate("userId", "fullName");
+
+  if (seats.length === 0) {
+    throw new ApiError(404, "No pending seats found.");
+  }
+
+  const byGame = new Map();
+  seats.forEach((s) => {
+    const gameId = s.gameId._id.toString();
+    byGame.set(gameId, (byGame.get(gameId) || 0) + 1);
+  });
+
+  for (const [gameId, count] of byGame) {
+    await Game.updateOne(
+      { _id: gameId },
+      { $inc: { reservedSeatsCount: count } },
+    );
+  }
+
+  await Seat.updateMany(
+    { _id: { $in: seatIds }, status: SEAT_STATUS.PENDING },
+    { $set: { status: SEAT_STATUS.CONFIRMED, pendingExpiresAt: null } },
+  );
+
+  await notifySeatStatusChange(
+    seats,
+    "Seats Approved",
+    (entry) =>
+      `Your seat${entry.seatNumbers.length > 1 ? "s" : ""} ${entry.seatNumbers.map((n) => `#${n}`).join(", ")} in "${entry.game.title}" ${entry.seatNumbers.length > 1 ? "have" : "has"} been approved. Good luck!`,
+  );
+
+  return { approved: seats.length };
+};
+
+export const rejectPendingSeats = async (seatIds) => {
+  const seats = await Seat.find({
+    _id: { $in: seatIds },
+    status: SEAT_STATUS.PENDING,
+  })
+    .populate("gameId", "title gameCode prize")
+    .populate("userId", "fullName");
+
+  if (seats.length === 0) {
+    throw new ApiError(404, "No pending seats found.");
+  }
+
+  await Seat.deleteMany({ _id: { $in: seatIds }, status: SEAT_STATUS.PENDING });
+
+  seats.forEach((seat) => {
+    if (seat.paymentProofPublicId) {
+      deleteFromCloudinary(seat.paymentProofPublicId);
+    }
+  });
+
+  await notifySeatStatusChange(
+    seats,
+    "Seat Reservation Rejected",
+    (entry) =>
+      `Your reservation for seat${entry.seatNumbers.length > 1 ? "s" : ""} ${entry.seatNumbers.map((n) => `#${n}`).join(", ")} in "${entry.game.title}" ${entry.seatNumbers.length > 1 ? "was" : "was"} rejected and the seats have been released.`,
+  );
+
+  return { rejected: seats.length };
 };

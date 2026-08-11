@@ -11,8 +11,8 @@ export const getGameDetails = asyncHandler(async (req, res) => {
 const { gameCode } = req.params;
 const game = await gamesService.getGameByPublicCode(gameCode);
 const currentUserId = req.user ? req.user._id.toString() : null;
-const { seatMap, userReservedSeat } = await seatsService.getGameSeatGrid(game._id, game.totalSeats, currentUserId);
+const { seatMap, userReservedSeats, pendingSeats } = await seatsService.getGameSeatGrid(game._id, game.totalSeats, currentUserId);
 res.status(200).json(
-new ApiResponse(200, { game, userReservedSeat, seatMap }, 'Game details retrieved successfully')
+new ApiResponse(200, { game, userReservedSeats, pendingSeats, seatMap }, 'Game details retrieved successfully')
 );
 });

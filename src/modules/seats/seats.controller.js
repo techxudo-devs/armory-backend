@@ -1,14 +1,30 @@
 import asyncHandler from "../../shared/utils/asyncHandler.js";
 import ApiResponse from "../../shared/utils/apiResponse.js";
+import { uploadToCloudinary } from "../../shared/utils/cloudinary.js";
 import * as seatsService from "./seats.service.js";
 
-export const reserveSeat = asyncHandler(async (req, res) => {
+export const reserveSeats = asyncHandler(async (req, res) => {
   const { gameId } = req.params;
-  const { seatNumber } = req.body;
-  const result = await seatsService.reserveSeatForUser(
+  const { seatNumbers, paymentReference } = req.body;
+
+  let paymentProof = "";
+  let paymentProofPublicId = "";
+  if (req.file) {
+    const uploadResult = await uploadToCloudinary(
+      req.file.buffer,
+      "lucky_seat_payments",
+    );
+    paymentProof = uploadResult.secure_url;
+    paymentProofPublicId = uploadResult.public_id;
+  }
+
+  const result = await seatsService.reserveSeatsForUser(
     gameId,
-    seatNumber,
+    seatNumbers,
     req.user._id,
+    paymentReference,
+    paymentProof,
+    paymentProofPublicId,
   );
   res
     .status(200)
@@ -16,7 +32,7 @@ export const reserveSeat = asyncHandler(async (req, res) => {
       new ApiResponse(
         200,
         result,
-        `Seat #${seatNumber} reserved successfully!`,
+        `Seat ${result.seatNumbers.map((n) => `#${n}`).join(", ")} submitted. Your seats are pending approval.`,
       ),
     );
 });

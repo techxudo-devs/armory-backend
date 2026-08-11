@@ -123,3 +123,40 @@ export const announceWinners = asyncHandler(async (req, res) => {
       ),
     );
 });
+
+export const getPendingApprovals = asyncHandler(async (req, res) => {
+  const approvals = await adminService.getPendingApprovals();
+  res
+    .status(200)
+    .json(
+      new ApiResponse(200, approvals, "Pending seat approvals retrieved"),
+    );
+});
+
+export const approvePendingSeats = asyncHandler(async (req, res) => {
+  const { seatIds } = req.body;
+  const result = await adminService.approvePendingSeats(seatIds);
+  res
+    .status(200)
+    .json(
+      new ApiResponse(
+        200,
+        result,
+        `${result.approved} seat${result.approved > 1 ? "s" : ""} approved`,
+      ),
+    );
+});
+
+export const rejectPendingSeats = asyncHandler(async (req, res) => {
+  const { seatIds } = req.body;
+  const result = await adminService.rejectPendingSeats(seatIds);
+  res
+    .status(200)
+    .json(
+      new ApiResponse(
+        200,
+        result,
+        `${result.rejected} seat${result.rejected > 1 ? "s" : ""} rejected`,
+      ),
+    );
+});
