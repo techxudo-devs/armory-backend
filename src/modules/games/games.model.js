@@ -51,6 +51,11 @@ const gameSchema = new mongoose.Schema(
       default: 1,
       min: [1, "Must have at least 1 winner"],
     },
+    category: {
+      type: String,
+      enum: ["Knives", "Optics", "Ammo", "Accessories", "Firearms"],
+      default: "Accessories",
+    },
     status: {
       type: String,
       enum: Object.values(GAME_STATUS),

@@ -52,6 +52,7 @@ export const createNewGame = async (gameData, adminUserId, imageBuffer) => {
     rules: gameData.rules || "",
     totalSeats: gameData.totalSeats,
     numberOfWinners: numberOfWinners,
+    category: gameData.category || "Accessories",
     endType: gameData.endType || "manual",
     endDate: gameData.endDate ? new Date(gameData.endDate) : null,
     gameCode,
@@ -147,6 +148,7 @@ export const updateGameDetails = async (gameId, updateData, imageBuffer) => {
   }
   if (updateData.endType) game.endType = updateData.endType;
   if (updateData.endDate) game.endDate = new Date(updateData.endDate);
+  if (updateData.category) game.category = updateData.category;
 
   await game.save();
   return game;

@@ -12,7 +12,7 @@ export const getActiveGamesList = async (page, limit) => {
     limit,
     sort: { createdAt: -1 },
     select:
-      "title prize prizeImageUrl totalSeats reservedSeatsCount gameCode status createdAt endDate endType",
+      "title prize prizeImageUrl totalSeats reservedSeatsCount gameCode status createdAt endDate endType category",
   });
 
   if (result.docs?.length) {
