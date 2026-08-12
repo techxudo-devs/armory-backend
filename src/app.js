@@ -8,6 +8,7 @@ import usersRoutes from "./modules/users/users.routes.js";
 import gamesRoutes from "./modules/games/games.routes.js";
 import seatsRoutes from "./modules/seats/seats.routes.js";
 import notificationsRoutes from "./modules/notifications/notifications.routes.js";
+import feedbackRoutes from "./modules/feedback/feedback.routes.js";
 import adminRoutes from "./modules/admin/admin.routes.js";
 import { errorHandler } from "./middlewares/error.middleware.js";
 import ApiError from "./shared/errors/apiError.js";
@@ -53,6 +54,7 @@ app.use("/api/users", usersRoutes);
 app.use("/api/games", gamesRoutes);
 app.use("/api/seats", seatsRoutes);
 app.use("/api/notifications", notificationsRoutes);
+app.use("/api/feedback", feedbackRoutes);
 app.use("/api/admin", adminRoutes);
 
 // Vercel Cron Trigger - Auto-end expired games (called every minute via vercel.json crons)

@@ -557,7 +557,7 @@ export const getPendingApprovals = async () => {
   await releaseExpiredPendingSeats();
 
   const seats = await Seat.find({ status: SEAT_STATUS.PENDING })
-    .sort({ createdAt: 1 })
+    .sort({ createdAt: -1 })
     .populate("gameId", "title gameCode prize totalSeats")
     .populate("userId", "fullName phone email");
 
