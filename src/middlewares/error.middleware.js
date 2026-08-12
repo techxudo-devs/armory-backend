@@ -2,11 +2,7 @@ import ApiError from "../shared/errors/apiError.js";
 
 export const errorHandler = (err, req, res, next) => {
   let error = { ...err };
-
   error.message = err.message;
-  if (process.env.NODE_ENV === "development") {
-    console.error("[ERROR]", err);
-  }
 
   if (err.name === "CastError") {
     const message = `Resource not found with id of ${err.value}`;
@@ -25,10 +21,18 @@ export const errorHandler = (err, req, res, next) => {
       .join(", ");
     error = new ApiError(400, message);
   }
-  
-  res.status(error.statusCode || 500).json({
+
+  const statusCode = error.statusCode || err.statusCode || 500;
+
+  if (process.env.NODE_ENV === "development") {
+    if (statusCode >= 500) {
+      console.error("[ERROR]", err);
+    }
+  }
+
+  res.status(statusCode).json({
     success: false,
-    statusCode: error.statusCode || 500,
+    statusCode: statusCode,
     message: error.message || "Internal Server Error",
     errors: error.errors || [],
   });
