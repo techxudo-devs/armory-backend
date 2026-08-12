@@ -32,6 +32,8 @@ export const sendTokenCookie = (user, statusCode, res, message = "Success") => {
 export const clearTokenCookie = (res) => {
   res.cookie("token", "logout", {
     httpOnly: true,
-    expires: new Date(Date.now() + 1000),
+    expires: new Date(0),
+    secure: process.env.NODE_ENV === "production",
+    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
   });
 };
