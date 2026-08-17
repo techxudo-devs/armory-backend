@@ -1,7 +1,7 @@
 import Game from "./games.model.js";
 import ApiError from "../../shared/errors/apiError.js";
 import { getPaginatedData } from "../../shared/utils/pagination.js";
-import { endGameIfExpired } from "../../shared/utils/endGameNotifier.js";
+import { endGameIfSeatsFull } from "../../shared/utils/endGameNotifier.js";
 import { GAME_STATUS } from "../../constants/gameStatus.js";
 
 export const getActiveGamesList = async (page, limit) => {
@@ -17,7 +17,7 @@ export const getActiveGamesList = async (page, limit) => {
 
   if (result.docs?.length) {
     for (const game of result.docs) {
-      await endGameIfExpired(game);
+      await endGameIfSeatsFull(game);
     }
   }
 
@@ -32,6 +32,6 @@ export const getGameByPublicCode = async (gameCode) => {
   if (!game) {
     throw new ApiError(404, "Game not found.");
   }
-  await endGameIfExpired(game);
+  await endGameIfSeatsFull(game);
   return game;
 };

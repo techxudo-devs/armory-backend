@@ -3,7 +3,7 @@ import Game from "../games/games.model.js";
 import ApiError from "../../shared/errors/apiError.js";
 import { GAME_STATUS } from "../../constants/gameStatus.js";
 import { SEAT_STATUS } from "../../constants/seatStatus.js";
-import { endGameIfExpired } from "../../shared/utils/endGameNotifier.js";
+import { endGameIfSeatsFull } from "../../shared/utils/endGameNotifier.js";
 
 export const PENDING_TTL_MS = 48 * 60 * 60 * 1000;
 
@@ -54,7 +54,7 @@ export const reserveSeatsForUser = async (
 ) => {
   const game = await Game.findById(gameId);
   if (!game) throw new ApiError(404, "Game not found.");
-  await endGameIfExpired(game);
+  await endGameIfSeatsFull(game);
   if (game.status !== GAME_STATUS.ACTIVE) {
     throw new ApiError(400, "This game has automatically ended.");
   }
@@ -150,7 +150,7 @@ export const getUserJoinedGames = async (userId, page = 1, limit = 10) => {
     .populate("winners.user", "fullName");
 
   for (const game of games) {
-    await endGameIfExpired(game);
+    await endGameIfSeatsFull(game);
   }
 
   const formattedDocs = games.map((game) => {

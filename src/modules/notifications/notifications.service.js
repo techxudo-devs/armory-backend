@@ -47,6 +47,7 @@ export const sendBulkNotifications = async (notificationsArray) => {
       message: doc.message,
       isRead: doc.isRead,
       createdAt: doc.createdAt,
+      metadata: doc.metadata ?? undefined,
     };
     await triggerPusher(`user-${doc.userId.toString()}`, "notification:new", payload);
   }

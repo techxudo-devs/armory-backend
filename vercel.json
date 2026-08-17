@@ -5,11 +5,5 @@
       "source": "/(.*)",
       "destination": "/api"
     }
-  ],
-  "crons": [
-    {
-      "path": "/api/cron/end-games",
-      "schedule": "0 0 * * *"
-    }
   ]
 }

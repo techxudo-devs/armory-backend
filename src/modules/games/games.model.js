@@ -53,7 +53,7 @@ const gameSchema = new mongoose.Schema(
     },
     category: {
       type: String,
-      enum: ["Knives", "Optics", "Ammo", "Accessories", "Firearms"],
+      enum: ["Knives", "Optics", "Ammo", "Accessories", "Firearms", "Other"],
       default: "Accessories",
     },
     status: {

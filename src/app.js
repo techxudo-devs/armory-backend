@@ -12,7 +12,6 @@ import feedbackRoutes from "./modules/feedback/feedback.routes.js";
 import adminRoutes from "./modules/admin/admin.routes.js";
 import { errorHandler } from "./middlewares/error.middleware.js";
 import ApiError from "./shared/errors/apiError.js";
-import { checkExpiredGames } from "./shared/utils/cron.js";
 
 const app = express();
 
@@ -56,27 +55,6 @@ app.use("/api/seats", seatsRoutes);
 app.use("/api/notifications", notificationsRoutes);
 app.use("/api/feedback", feedbackRoutes);
 app.use("/api/admin", adminRoutes);
-
-// Vercel Cron Trigger - Auto-end expired games (called every minute via vercel.json crons)
-app.get("/api/cron/end-games", async (req, res, next) => {
-  const auth = req.headers["authorization"];
-  if (
-    process.env.CRON_SECRET &&
-    auth !== `Bearer ${process.env.CRON_SECRET}`
-  ) {
-    return res
-      .status(403)
-      .json({ success: false, message: "Unauthorized cron request" });
-  }
-  try {
-    await checkExpiredGames();
-    return res
-      .status(200)
-      .json({ success: true, message: "Expired games check completed." });
-  } catch (error) {
-    return next(error);
-  }
-});
 
 // Handle 404 Route Not Found
 app.use("*", (req, res, next) => {

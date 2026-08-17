@@ -8,21 +8,19 @@ import {
 } from "./email.js";
 import { triggerPusher } from "./realtime.js";
 import { GAME_STATUS } from "../../constants/gameStatus.js";
-import { GAME_END_TYPE } from "../../constants/gameStatus.js";
 import { SEAT_STATUS } from "../../constants/seatStatus.js";
 
 /**
- * Ends an automatic game immediately if its endDate has passed and it is
- * still active. Used by every read/action path ("lazy auto-end") so games
- * end on time even on serverless hosts where background timers do not run.
+ * Ends a game immediately if all its seats are filled (reservedSeatsCount >= totalSeats)
+ * and it is still active. Used by every read/action path ("lazy auto-end") so games
+ * end promptly when capacity is reached.
  */
-export const endGameIfExpired = async (game) => {
+export const endGameIfSeatsFull = async (game) => {
   if (!game) return null;
   if (
-    game.endType === GAME_END_TYPE.AUTOMATIC &&
     game.status === GAME_STATUS.ACTIVE &&
-    game.endDate &&
-    new Date() > new Date(game.endDate)
+    game.totalSeats &&
+    game.reservedSeatsCount >= game.totalSeats
   ) {
     return await endGameWithNotifications(game);
   }
@@ -32,7 +30,7 @@ export const endGameIfExpired = async (game) => {
 /**
  * Marks a game as ended (only if currently active) and notifies every active
  * user via in-app notification + email. Shared by all game-ending paths:
- * manual admin end, automatic end on endDate expiry, and seat-time auto-end.
+ * manual admin end and auto-end when all seats are filled.
  *
  * Also releases any seats still pending approval (unpaid) so they can never
  * be selected as winners.

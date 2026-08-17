@@ -9,7 +9,7 @@ import ApiError from "../../shared/errors/apiError.js";
 import { GAME_STATUS } from "../../constants/gameStatus.js";
 import { SEAT_STATUS } from "../../constants/seatStatus.js";
 import { getPaginatedData } from "../../shared/utils/pagination.js";
-import { endGameWithNotifications, endGameIfExpired } from "../../shared/utils/endGameNotifier.js";
+import { endGameWithNotifications, endGameIfSeatsFull } from "../../shared/utils/endGameNotifier.js";
 import { uploadToCloudinary, deleteFromCloudinary } from "../../shared/utils/cloudinary.js";
 import {
   sendEmail,
@@ -396,7 +396,7 @@ export const getAllGamesForAdmin = async (page, limit, status) => {
 
   if (result.docs?.length) {
     for (const game of result.docs) {
-      await endGameIfExpired(game);
+      await endGameIfSeatsFull(game);
     }
   }
 
@@ -604,7 +604,7 @@ export const getPendingApprovals = async () => {
   }));
 };
 
-const notifySeatStatusChange = (seats, title, buildMessage) => {
+const notifySeatStatusChange = (seats, title, buildMessage, buildMetadata) => {
   const byUserGame = new Map();
   seats.forEach((s) => {
     const key = `${s.userId._id.toString()}-${s.gameId._id.toString()}`;
@@ -613,9 +613,12 @@ const notifySeatStatusChange = (seats, title, buildMessage) => {
         userId: s.userId._id,
         game: s.gameId,
         seatNumbers: [],
+        seats: [],
       });
     }
-    byUserGame.get(key).seatNumbers.push(s.seatNumber);
+    const group = byUserGame.get(key);
+    group.seatNumbers.push(s.seatNumber);
+    group.seats.push(s);
   });
 
   const notifications = [...byUserGame.values()].map((entry) => ({
@@ -623,6 +626,7 @@ const notifySeatStatusChange = (seats, title, buildMessage) => {
     gameId: entry.game._id,
     title,
     message: buildMessage(entry),
+    metadata: buildMetadata ? buildMetadata(entry) : undefined,
   }));
 
   return notificationService.sendBulkNotifications(notifications);
@@ -673,6 +677,14 @@ export const approvePendingSeats = async (seatIds) => {
     );
   }
 
+  // Auto-end games whose seats are now full after approval
+  for (const gameId of byGame.keys()) {
+    const game = await Game.findById(gameId);
+    if (game) {
+      await endGameIfSeatsFull(game);
+    }
+  }
+
   await Seat.updateMany(
     { _id: { $in: seatIds }, status: SEAT_STATUS.PENDING },
     { $set: { status: SEAT_STATUS.CONFIRMED, pendingExpiresAt: null } },
@@ -720,6 +732,12 @@ export const rejectPendingSeats = async (seatIds) => {
     "Seat Reservation Rejected",
     (entry) =>
       `Your reservation for seat${entry.seatNumbers.length > 1 ? "s" : ""} ${entry.seatNumbers.map((n) => `#${n}`).join(", ")} in "${entry.game.title}" ${entry.seatNumbers.length > 1 ? "was" : "was"} rejected and the seats have been released.`,
+    (entry) => ({
+      seatNumbers: entry.seatNumbers,
+      gameId: entry.game._id.toString(),
+      gameTitle: entry.game.title,
+      paymentReference: entry.seats[0]?.paymentReference || "",
+    }),
   );
 
   await notifySeatMapUpdated(seats, "reject");
